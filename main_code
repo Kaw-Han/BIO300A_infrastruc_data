@@ -1,0 +1,67 @@
+
+library(tidyverse)
+library(readr)
+library(tidyr)
+library(dplyr)
+library(patchwork)
+library(stats)
+
+
+dejonge_dataset <- read_csv("data/dejonge_data/2022_deJonge_Dataset_092022.csv")|>
+                                select(StudyYear, Country, Longitude, Latitude,
+                                       Group, SpeciesName, AbundanceUnit,
+                                       InfraAbundance_original,
+                                       ControlAbundance_original, InfraA,
+                                       ControlA, InfraN, ControlN,
+                                       InfraType, Dist, CDist, MinDist,
+                                       MaxDist, MinCDist, MaxCDist) |>
+  na.omit(dejonge_dataset) 
+
+
+  #abundance. We use this function in the anova-model below, as well as the boxplot. 
+dejonge_dataset_abundance <- dejonge_dataset |>
+  filter(StudyYear >= 2010) |> 
+  select( Group, InfraA, ControlA, InfraType)
+
+  
+#distribution of means Linear Infrastructure  
+
+dejonge_dataset_mean <- dejonge_dataset_abundance |> 
+  group_by(InfraType) |> 
+  summarise(mean_abundance = mean(InfraA)) |> 
+  arrange(mean_abundance)
+
+#distribution of means Linear Infrastructure control
+
+dejonge_dataset_mean_control <- dejonge_dataset_abundance |> 
+  group_by(InfraType) |> 
+  summarise(mean_abundance_C = mean(ControlA)) |> 
+  arrange(mean_abundance_C)
+
+  #anova-model
+aov_model <- aov(InfraA ~ InfraType, data = dejonge_dataset_abundance)
+
+summary(aov_model)
+
+
+#graphic display of anova-model: 
+abundance_infratype_boxplot <- ggplot(dejonge_dataset_abundance, 
+                            aes(x = InfraType, 
+                                y =  InfraA, fill = InfraType)) +
+  geom_violin() +
+  labs(x = "Infrastructure Type", y = "Abundance (log10)", fill = "Infrastructure Type") +
+  ggtitle("Abundance of Animals by Infrastructure Type") + 
+  theme_bw()
+
+abundance_infratype_boxplot + scale_y_log10() + scale_fill_viridis_d()
+
+
+abundance_animalgroup_boxplot <- ggplot(dejonge_dataset_abundance, 
+                            aes(x = Group, 
+                                y =  InfraA, fill = InfraType)) +
+  geom_violin() +
+  labs(x = "Infrastructure Type", y = "Abundance (log10)", fill = "Infrastructure Type") +
+  ggtitle("Abundance of Animals by Species Group") + 
+  theme_bw()
+
+abundance_animalgroup_boxplot + scale_y_log10() + scale_fill_viridis_d()
