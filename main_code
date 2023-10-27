@@ -1,3 +1,4 @@
+#loading libraries
 
 library(tidyverse)
 library(readr)
@@ -6,6 +7,9 @@ library(dplyr)
 library(patchwork)
 library(stats)
 
+
+
+#loading data
 
 dejonge_dataset <- read_csv("data/dejonge_data/2022_deJonge_Dataset_092022.csv")|>
                                 select(StudyYear, Country, Longitude, Latitude,
@@ -16,52 +20,132 @@ dejonge_dataset <- read_csv("data/dejonge_data/2022_deJonge_Dataset_092022.csv")
                                        InfraType, Dist, CDist, MinDist,
                                        MaxDist, MinCDist, MaxCDist) |>
   na.omit(dejonge_dataset) 
-
-
-  #abundance. We use this function in the anova-model below, as well as the boxplot. 
-dejonge_dataset_abundance <- dejonge_dataset |>
-  filter(StudyYear >= 2010) |> 
-  select( Group, InfraA, ControlA, InfraType)
+  
 
   
-#distribution of means Linear Infrastructure  
+#abundance. We use this function in the anova-model below, as well as the boxplot. 
+dejonge_dataset_abundance <- subset(dejonge_dataset, InfraType %in% c("Highway", "Paved road", "County Road", "Unpaved road", "Dirt Road", "Gravel Road")) |>
+  select(StudyYear, Country, Group, InfraA, ControlA, InfraType)
 
-dejonge_dataset_mean <- dejonge_dataset_abundance |> 
-  group_by(InfraType) |> 
-  summarise(mean_abundance = mean(InfraA)) |> 
-  arrange(mean_abundance)
+dejonge_dataset_abundance <- subset(dejonge_dataset_abundance, Group %in% c("Mammals", "Birds")) 
 
-#distribution of means Linear Infrastructure control
-
-dejonge_dataset_mean_control <- dejonge_dataset_abundance |> 
-  group_by(InfraType) |> 
-  summarise(mean_abundance_C = mean(ControlA)) |> 
-  arrange(mean_abundance_C)
-
-  #anova-model
-aov_model <- aov(InfraA ~ InfraType, data = dejonge_dataset_abundance)
-
-summary(aov_model)
+dejonge_dataset_abundance <- mutate(dejonge_dataset_abundance, Difference = InfraA - ControlA)
 
 
-#graphic display of anova-model: 
+
+
+mammals_birds_data <- subset(dejonge_dataset, Group %in% c("Mammals", "Birds"))
+
+paved_roads_abundance <- subset(mammals_birds_data, InfraType %in% c("Highway", "Paved road", "County road"))
+
+unpaved_roads_abundance <- subset(mammals_birds_data, InfraType %in% c("Unpaved road", "Gravel road", "Dirt road"))
+
+
+
+#graphic:  Abundance of Animals by Infrastructure Type
 abundance_infratype_boxplot <- ggplot(dejonge_dataset_abundance, 
                             aes(x = InfraType, 
-                                y =  InfraA, fill = InfraType)) +
-  geom_violin() +
-  labs(x = "Infrastructure Type", y = "Abundance (log10)", fill = "Infrastructure Type") +
-  ggtitle("Abundance of Animals by Infrastructure Type") + 
+                                y =  InfraA, color = Group)) +
+  geom_boxplot() +
+  labs(x = "", y = "Abundance (log10)", fill = "Group") +
+  ggtitle("Treatment") + 
   theme_bw()
 
-abundance_infratype_boxplot + scale_y_log10() + scale_fill_viridis_d()
+#graphic display: 
+abundance_infratype_boxplot_C <- ggplot(dejonge_dataset_abundance, 
+                            aes(x = InfraType, 
+                                y =  ControlA, color = Group)) +
+  geom_boxplot() +
+  labs(x = "Infrastructure Type", y = "Abundance (log10)", fill = "Group") +
+  ggtitle("Control") + 
+  theme_bw()
 
 
-abundance_animalgroup_boxplot <- ggplot(dejonge_dataset_abundance, 
+(abundance_infratype_boxplot + scale_y_log10()) / (abundance_infratype_boxplot_C + scale_y_log10())
+
+
+
+#more plots
+
+paved_abundance_plot <- ggplot(paved_roads_abundance, 
                             aes(x = Group, 
-                                y =  InfraA, fill = InfraType)) +
-  geom_violin() +
-  labs(x = "Infrastructure Type", y = "Abundance (log10)", fill = "Infrastructure Type") +
-  ggtitle("Abundance of Animals by Species Group") + 
+                                y =  InfraA, color = Country, alpha = 0.3)) +
+  geom_jitter() +
+  labs(x = "Species group", y = "Abundance (log10)", fill = "Species group") +
+  ggtitle("Abundance of Animals, Paved Roads") + 
   theme_bw()
 
-abundance_animalgroup_boxplot + scale_y_log10() + scale_fill_viridis_d()
+
+unpaved_abundance_plot <- ggplot(unpaved_roads_abundance, 
+                            aes(x = Group, 
+                                y =  InfraA, color = Country, alpha = 0.3)) +
+  geom_jitter() +
+  labs(x = "Species group", y = "Abundance (log10)", fill = "Species group") +
+  ggtitle("Abundance of Animals, Unpaved Roads") + 
+  theme_bw()
+
+paved_plot <- paved_abundance_plot + scale_y_log10() + scale_fill_viridis_d() 
+unpaved_plot <- unpaved_abundance_plot + scale_y_log10() + scale_fill_viridis_d()
+
+
+paved_plot + guides(alpha = FALSE) 
+unpaved_plot + guides(alpha = FALSE) 
+
+
+
+
+#making combined plot for two way anova aov-model: 
+
+# Combine the datasets
+combined <- rbind(paved_roads_abundance, unpaved_roads_abundance)
+
+# Perform the two-way ANOVA
+model <- aov(InfraA ~ Group + factor(InfraType), data = combined)
+
+# Print the ANOVA table
+summary(model)
+
+
+
+
+# Calculate the mean abundance for each group
+mean_abundance <- combined |> 
+  group_by(InfraType, Group) |> 
+  summarize(mean_abundance = mean(InfraA))
+
+# Create a boxplot with log10 scale on y-axis and mean abundance line
+all_roads_plot <- ggplot(combined, aes(x = InfraType, y = InfraA, fill = Group, color = Country, shape = Group, alpha = 0.3)) +
+  geom_jitter() +
+  stat_summary(fun = mean, aes(group = Group), size = 1, alpha = 1) +
+  labs(x = "Road Type", y = "Animal Abundance (log10 scale)", fill = "Group") +
+  scale_y_log10() +
+  theme_minimal() +
+  theme(legend.position = "top",
+        legend.justification = "left",
+        legend.margin = margin(l = -15))
+
+# Display the plot
+print(all_roads_plot + guides(alpha = FALSE))
+
+
+
+# Calculate the mean abundance for each group
+mean_abundance <- combined |> 
+  group_by(InfraType, Group) |> 
+  summarize(mean_abundance = mean(InfraA))
+
+# Create a boxplot with log10 scale on y-axis and mean abundance line
+all_roads_plot <- ggplot(combined, aes(x = InfraType, y = InfraA, fill = Group, color = Group, shape = Group, alpha = 0.3)) +
+  geom_boxplot() +
+  stat_summary(fun = mean, aes(group = Group), size = 1, alpha = 1) +
+  labs(x = "Road Type", y = "Animal Abundance (log10 scale)", fill = "Group") +
+  scale_y_log10() +
+  theme_minimal() +
+  theme(legend.position = "top",
+        legend.justification = "left",
+        legend.margin = margin(l = -15))
+
+# Display the plot
+print(all_roads_plot + guides(alpha = FALSE))
+
+  
